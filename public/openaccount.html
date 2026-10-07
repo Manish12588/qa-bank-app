@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>QABank | Open New Account</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a href="dashboard.html" class="brand">QA<span>Bank</span></a>
+      <nav>
+        <a href="dashboard.html">Accounts Overview</a>
+        <a href="openaccount.html" class="active">Open New Account</a>
+        <a href="transfer.html">Transfer Funds</a>
+        <a href="billpay.html">Bill Pay</a>
+        <a href="loan.html">Request Loan</a>
+        <a href="findtrans.html">Find Transactions</a>
+      </nav>
+      <a href="#" id="logoutLink" class="logout-link">Log Out</a>
+    </aside>
+
+    <main class="main-content">
+      <h2>Open New Account</h2>
+      <p class="page-sub">Open a savings account funded from an existing one.</p>
+
+      <div class="content-grid">
+        <div class="card" style="max-width:none;">
+          <form id="openForm">
+            <label for="type">Account Type</label>
+            <select id="type" name="type">
+              <option value="SAVINGS">SAVINGS</option>
+            </select>
+
+            <label for="fromAccountId">Fund From</label>
+            <select id="fromAccountId" name="fromAccountId"></select>
+
+            <button type="submit" id="openAccountButton">Open New Account</button>
+          </form>
+
+          <div id="openAccountResult" style="display:none">
+            <h2>Account Opened!</h2>
+            <p>Congratulations, your account is now open.</p>
+            <p><b>Your new account number:</b> <a id="newAccountId" href="#"></a></p>
+          </div>
+          <div id="openAccountError" class="error"></div>
+        </div>
+
+        <div class="side-card">
+          <h3>Your Accounts</h3>
+          <div id="sideAccounts"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    function renderSideAccounts(accounts) {
+      const el = document.getElementById("sideAccounts");
+      el.innerHTML = accounts.map((acc) => `
+        <div class="mini-account-row">
+          <div><div>#${acc.id}</div><div class="acc-type">${acc.type}</div></div>
+          <div class="acc-balance">$${acc.balance.toFixed(2)}</div>
+        </div>
+      `).join("");
+    }
+
+    async function loadFromAccounts() {
+      const res = await api("GET", "/api/accounts");
+      if (!res.ok) { window.location.href = "login.html"; return; }
+      const sel = document.getElementById("fromAccountId");
+      sel.innerHTML = "";
+      res.data.forEach((acc) => {
+        const opt = document.createElement("option");
+        opt.value = acc.id;
+        opt.textContent = `${acc.id} (${acc.type}) - $${acc.balance.toFixed(2)}`;
+        sel.appendChild(opt);
+      });
+      renderSideAccounts(res.data);
+    }
+    document.getElementById("openForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const res = await api("POST", "/api/accounts", {
+        type: form.type.value,
+        fromAccountId: Number(form.fromAccountId.value),
+      });
+      if (res.ok) {
+        document.getElementById("openAccountResult").style.display = "block";
+        document.getElementById("openAccountError").textContent = "";
+        const link = document.getElementById("newAccountId");
+        link.textContent = res.data.id;
+        link.href = `findtrans.html?accountId=${res.data.id}`;
+        loadFromAccounts();
+      } else {
+        document.getElementById("openAccountError").textContent = res.data.error || "Could not open account";
+      }
+    });
+    document.getElementById("logoutLink").addEventListener("click", async (e) => {
+      e.preventDefault();
+      await api("POST", "/api/logout");
+      window.location.href = "login.html";
+    });
+    loadFromAccounts();
+  </script>
+</body>
+</html>

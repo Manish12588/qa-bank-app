@@ -1,0 +1,273 @@
+openapi: 3.0.3
+info:
+  title: QABank API
+  description: >
+    A small, self-contained demo banking API built for test automation.
+    Session-based auth via an httpOnly cookie — call /api/register or
+    /api/login first, then the cookie is sent automatically on subsequent
+    requests (the "Authorize" flow below sets this up for you in this UI).
+  version: 1.0.0
+servers:
+  - url: /api
+tags:
+  - name: Auth
+  - name: Accounts
+  - name: Transfers
+  - name: Bill Pay
+  - name: Loans
+
+paths:
+  /register:
+    post:
+      tags: [Auth]
+      summary: Register a new customer
+      description: Creates a customer and one CHECKING account (balance 1000.00). Logs the customer in automatically (sets the session cookie).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [firstName, lastName, username, password]
+              properties:
+                firstName: { type: string, example: Jane }
+                lastName: { type: string, example: Doe }
+                username: { type: string, example: jane.doe }
+                password: { type: string, example: "Test@12345" }
+                address: { type: string, example: "1 Main Street" }
+                city: { type: string, example: Frankfurt }
+                state: { type: string, example: Hesse }
+                zipCode: { type: string, example: "60326" }
+                phone: { type: string, example: "0123456789" }
+                ssn: { type: string, example: "123-45-6789" }
+      responses:
+        '201':
+          description: Registered and logged in
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  customerId: { type: integer, example: 1000 }
+                  username: { type: string, example: jane.doe }
+                  checkingAccountId: { type: integer, example: 5000 }
+        '400':
+          description: Missing required fields
+        '409':
+          description: Username already exists
+
+  /login:
+    post:
+      tags: [Auth]
+      summary: Log in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string }
+                password: { type: string }
+      responses:
+        '200':
+          description: Logged in, session cookie set
+        '400':
+          description: Invalid username and/or password
+
+  /logout:
+    post:
+      tags: [Auth]
+      summary: Log out and clear the session
+      responses:
+        '200': { description: Logged out }
+
+  /me:
+    get:
+      tags: [Auth]
+      summary: Get the currently logged-in customer
+      responses:
+        '200': { description: Current customer }
+        '401': { description: Not logged in }
+
+  /accounts:
+    get:
+      tags: [Accounts]
+      summary: List the logged-in customer's accounts
+      responses:
+        '200':
+          description: List of accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Account'
+        '401': { description: Not logged in }
+    post:
+      tags: [Accounts]
+      summary: Open a new SAVINGS account
+      description: Funds the new account with 100.00, deducted from fromAccountId.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, fromAccountId]
+              properties:
+                type: { type: string, enum: [SAVINGS] }
+                fromAccountId: { type: integer, example: 5000 }
+      responses:
+        '201':
+          description: Account opened
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '400': { description: Invalid funding account or insufficient funds }
+        '401': { description: Not logged in }
+
+  /accounts/{id}/transactions:
+    get:
+      tags: [Accounts]
+      summary: List (and optionally filter) an account's transactions
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: amount
+          in: query
+          required: false
+          schema: { type: number }
+          description: Exact amount match
+        - name: type
+          in: query
+          required: false
+          schema: { type: string, enum: [Debit, Credit, All] }
+      responses:
+        '200':
+          description: Matching transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Transaction'
+        '404': { description: Account not found }
+
+  /transfer:
+    post:
+      tags: [Transfers]
+      summary: Transfer funds between two of the logged-in customer's accounts
+      description: >
+        Rejects: insufficient funds, amount <= 0, amount with more than 2
+        decimal places, same-account transfer, and unknown destination account.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fromAccountId, toAccountId, amount]
+              properties:
+                fromAccountId: { type: integer, example: 5000 }
+                toAccountId: { type: integer, example: 5001 }
+                amount: { type: number, example: 50 }
+      responses:
+        '200':
+          description: Transfer completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  fromBalance: { type: number }
+                  toBalance: { type: number }
+        '400': { description: Validation failed (see description) }
+        '401': { description: Not logged in }
+
+  /billpay:
+    post:
+      tags: [Bill Pay]
+      summary: Pay a bill from one of the logged-in customer's accounts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [accountId, amount, payeeName]
+              properties:
+                accountId: { type: integer, example: 5000 }
+                amount: { type: number, example: 25 }
+                payeeName: { type: string, example: "Elec Co" }
+      responses:
+        '200':
+          description: Payment completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  payeeName: { type: string }
+                  amount: { type: number }
+                  accountId: { type: integer }
+                  balance: { type: number }
+        '400': { description: Invalid amount or insufficient funds }
+        '401': { description: Not logged in }
+
+  /loan:
+    post:
+      tags: [Loans]
+      summary: Request a loan
+      description: Approved if amount <= downPayment * 10 and the account can cover the down payment.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount, downPayment, fromAccountId]
+              properties:
+                amount: { type: number, example: 100 }
+                downPayment: { type: number, example: 10 }
+                fromAccountId: { type: integer, example: 5000 }
+      responses:
+        '200':
+          description: Loan decision (always 200 — check "approved")
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  approved: { type: boolean }
+                  accountId: { type: integer, nullable: true }
+                  amount: { type: number }
+                  downPayment: { type: number }
+                  message: { type: string, nullable: true, example: "error.insufficient.funds" }
+        '400': { description: Invalid amount, down payment, or account }
+        '401': { description: Not logged in }
+
+components:
+  schemas:
+    Account:
+      type: object
+      properties:
+        id: { type: integer, example: 5000 }
+        customerId: { type: integer, example: 1000 }
+        type: { type: string, enum: [CHECKING, SAVINGS, LOAN] }
+        balance: { type: number, example: 1000 }
+    Transaction:
+      type: object
+      properties:
+        id: { type: integer }
+        accountId: { type: integer }
+        type: { type: string, enum: [Debit, Credit] }
+        amount: { type: number }
+        description: { type: string, example: "Funds Transfer Sent" }
+        date: { type: integer, description: Unix epoch milliseconds }

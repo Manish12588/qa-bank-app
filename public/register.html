@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>QABank | Register</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="topnav">
+    <a href="index.html" class="brand">QA<span>Bank</span></a>
+    <div class="navlinks">
+      <a href="login.html">Login</a>
+      <a href="register.html">Register</a>
+      <a href="/api-docs" target="_blank">API Docs</a>
+    </div>
+  </div>
+
+  <div class="auth-wrap">
+    <div class="card wide">
+      <h2>Create your account</h2>
+      <p class="card-sub">Takes less than a minute</p>
+
+      <form id="registerForm">
+        <label for="firstName">First Name</label>
+        <input id="firstName" name="firstName" required>
+
+        <label for="lastName">Last Name</label>
+        <input id="lastName" name="lastName" required>
+
+        <label for="address">Address</label>
+        <input id="address" name="address">
+
+        <label for="city">City</label>
+        <input id="city" name="city">
+
+        <label for="state">State</label>
+        <input id="state" name="state">
+
+        <label for="zipCode">Zip Code</label>
+        <input id="zipCode" name="zipCode">
+
+        <label for="phone">Phone</label>
+        <input id="phone" name="phone">
+
+        <label for="ssn">SSN</label>
+        <input id="ssn" name="ssn">
+
+        <label for="username">Username</label>
+        <input id="username" name="username" required>
+
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" required>
+
+        <button type="submit" id="registerButton">Register</button>
+        <div id="registerMessage"></div>
+      </form>
+      <p class="card-sub" style="margin-top:20px;">Already have an account? <a href="login.html">Log in</a></p>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div>© QABank — a demo app for test automation portfolios.</div>
+    <div class="footer-links">
+      <a href="/api-docs" target="_blank">Swagger / API Docs</a>
+      <a href="https://github.com/Manish12588/bfsi-playwright-suite" target="_blank">GitHub — Test Suite</a>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+  <script>
+    document.getElementById("registerForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const body = {
+        firstName: form.firstName.value,
+        lastName: form.lastName.value,
+        address: form.address.value,
+        city: form.city.value,
+        state: form.state.value,
+        zipCode: form.zipCode.value,
+        phone: form.phone.value,
+        ssn: form.ssn.value,
+        username: form.username.value,
+        password: form.password.value,
+      };
+      const res = await api("POST", "/api/register", body);
+      if (res.ok) {
+        showSuccess("registerMessage", "Your account was created successfully. You are now logged in.");
+      } else if (res.status === 409) {
+        showError("registerMessage", "This username already exists.");
+      } else if (res.data && res.data.fields) {
+        showError("registerMessage", "Required: " + res.data.fields.join(", "));
+      } else {
+        showError("registerMessage", (res.data && res.data.error) || "Registration failed.");
+      }
+    });
+  </script>
+</body>
+</html>

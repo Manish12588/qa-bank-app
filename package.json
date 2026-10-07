@@ -1,0 +1,16 @@
+{
+  "name": "qabank",
+  "version": "1.0.0",
+  "description": "Self-contained demo banking app (API + UI) for test automation portfolios",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.6",
+    "express": "^4.19.2",
+    "js-yaml": "^5.4.3",
+    "swagger-ui-express": "^5.0.1",
+    "uuid": "^9.0.1"
+  }
+}

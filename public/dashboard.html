@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>QABank | Accounts Overview</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a href="dashboard.html" class="brand">QA<span>Bank</span></a>
+      <nav>
+        <a href="dashboard.html" class="active">Accounts Overview</a>
+        <a href="openaccount.html">Open New Account</a>
+        <a href="transfer.html">Transfer Funds</a>
+        <a href="billpay.html">Bill Pay</a>
+        <a href="loan.html">Request Loan</a>
+        <a href="findtrans.html">Find Transactions</a>
+      </nav>
+      <a href="#" id="logoutLink" class="logout-link">Log Out</a>
+    </aside>
+
+    <main class="main-content">
+      <h2 id="accountOverviewHeading">Accounts Overview</h2>
+      <p class="page-sub">A snapshot of everything you hold with QABank.</p>
+
+      <div class="summary-row" id="summaryRow"></div>
+
+      <table id="accountTable">
+        <thead>
+          <tr><th>Account</th><th>Type</th><th>Balance</th></tr>
+        </thead>
+        <tbody id="accountRows"></tbody>
+      </table>
+      <div id="dashboardMessage"></div>
+
+      <div class="quick-actions">
+        <a href="openaccount.html" class="quick-action-card">
+          <div class="icon">➕</div>
+          <div class="label">Open New Account</div>
+        </a>
+        <a href="transfer.html" class="quick-action-card">
+          <div class="icon">🔁</div>
+          <div class="label">Transfer Funds</div>
+        </a>
+        <a href="billpay.html" class="quick-action-card">
+          <div class="icon">🧾</div>
+          <div class="label">Pay a Bill</div>
+        </a>
+        <a href="loan.html" class="quick-action-card">
+          <div class="icon">📈</div>
+          <div class="label">Request a Loan</div>
+        </a>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    async function loadAccounts() {
+      const res = await api("GET", "/api/accounts");
+      if (!res.ok) {
+        window.location.href = "login.html";
+        return;
+      }
+
+      const total = res.data.reduce((sum, a) => sum + a.balance, 0);
+      const summary = document.getElementById("summaryRow");
+      summary.innerHTML = `
+        <div class="summary-card">
+          <div class="label">Total Balance</div>
+          <div class="value">$${total.toFixed(2)}</div>
+        </div>
+        <div class="summary-card">
+          <div class="label">Open Accounts</div>
+          <div class="value">${res.data.length}</div>
+        </div>
+      `;
+
+      const tbody = document.getElementById("accountRows");
+      tbody.innerHTML = "";
+      res.data.forEach((acc) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td><a href="findtrans.html?accountId=${acc.id}">${acc.id}</a></td><td>${acc.type}</td><td class="balance">$${acc.balance.toFixed(2)}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+    document.getElementById("logoutLink").addEventListener("click", async (e) => {
+      e.preventDefault();
+      await api("POST", "/api/logout");
+      window.location.href = "login.html";
+    });
+    loadAccounts();
+  </script>
+</body>
+</html>

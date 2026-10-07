@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>QABank | Bill Pay</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a href="dashboard.html" class="brand">QA<span>Bank</span></a>
+      <nav>
+        <a href="dashboard.html">Accounts Overview</a>
+        <a href="openaccount.html">Open New Account</a>
+        <a href="transfer.html">Transfer Funds</a>
+        <a href="billpay.html" class="active">Bill Pay</a>
+        <a href="loan.html">Request Loan</a>
+        <a href="findtrans.html">Find Transactions</a>
+      </nav>
+      <a href="#" id="logoutLink" class="logout-link">Log Out</a>
+    </aside>
+
+    <main class="main-content">
+      <h2>Bill Pay</h2>
+      <p class="page-sub">Pay a payee directly from one of your accounts.</p>
+
+      <div class="content-grid">
+        <div class="card" style="max-width:none;">
+          <form id="billPayForm">
+            <label for="payeeName">Payee Name</label>
+            <input id="payeeName" name="payeeName" required>
+
+            <label for="amount">Amount</label>
+            <input id="amount" name="amount" required>
+
+            <label for="accountId">From Account</label>
+            <select id="accountId" name="accountId"></select>
+
+            <button type="submit" id="sendPaymentButton">Send Payment</button>
+          </form>
+
+          <div id="billPayConfirmation" class="success"></div>
+          <div id="billPayError" class="error"></div>
+        </div>
+
+        <div class="side-card">
+          <h3>Your Accounts</h3>
+          <div id="sideAccounts"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    function renderSideAccounts(accounts) {
+      const el = document.getElementById("sideAccounts");
+      el.innerHTML = accounts.map((acc) => `
+        <div class="mini-account-row">
+          <div><div>#${acc.id}</div><div class="acc-type">${acc.type}</div></div>
+          <div class="acc-balance">$${acc.balance.toFixed(2)}</div>
+        </div>
+      `).join("");
+    }
+
+    async function loadAccountOptions() {
+      const res = await api("GET", "/api/accounts");
+      if (!res.ok) { window.location.href = "login.html"; return; }
+      const sel = document.getElementById("accountId");
+      sel.innerHTML = "";
+      res.data.forEach((acc) => {
+        const opt = document.createElement("option");
+        opt.value = acc.id;
+        opt.textContent = `${acc.id} (${acc.type}) - $${acc.balance.toFixed(2)}`;
+        sel.appendChild(opt);
+      });
+      renderSideAccounts(res.data);
+    }
+    document.getElementById("billPayForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      document.getElementById("billPayConfirmation").textContent = "";
+      document.getElementById("billPayError").textContent = "";
+      const res = await api("POST", "/api/billpay", {
+        payeeName: form.payeeName.value,
+        amount: form.amount.value,
+        accountId: Number(form.accountId.value),
+      });
+      if (res.ok) {
+        document.getElementById("billPayConfirmation").textContent = res.data.message;
+        loadAccountOptions();
+      } else {
+        document.getElementById("billPayError").textContent = (res.data && res.data.error) || "Bill payment failed.";
+      }
+    });
+    document.getElementById("logoutLink").addEventListener("click", async (e) => {
+      e.preventDefault();
+      await api("POST", "/api/logout");
+      window.location.href = "login.html";
+    });
+    loadAccountOptions();
+  </script>
+</body>
+</html>

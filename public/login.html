@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>QABank | Login</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="topnav">
+    <a href="index.html" class="brand">QA<span>Bank</span></a>
+    <div class="navlinks">
+      <a href="login.html">Login</a>
+      <a href="register.html">Register</a>
+      <a href="/api-docs" target="_blank">API Docs</a>
+    </div>
+  </div>
+
+  <div class="auth-wrap">
+    <div class="card">
+      <h2>Welcome back</h2>
+      <p class="card-sub">Log in to your QABank account</p>
+
+      <form id="loginForm">
+        <label for="username">Username</label>
+        <input id="username" name="username" required>
+
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" required>
+
+        <button type="submit" id="loginButton">Log In</button>
+        <div id="loginMessage"></div>
+      </form>
+      <p class="card-sub" style="margin-top:20px;">No account? <a href="register.html">Register here</a></p>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div>© QABank — a demo app for test automation portfolios.</div>
+    <div class="footer-links">
+      <a href="/api-docs" target="_blank">Swagger / API Docs</a>
+      <a href="https://github.com/Manish12588/bfsi-playwright-suite" target="_blank">GitHub — Test Suite</a>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+  <script>
+    document.getElementById("loginForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const res = await api("POST", "/api/login", {
+        username: form.username.value,
+        password: form.password.value,
+      });
+      if (res.ok) {
+        window.location.href = "dashboard.html";
+      } else {
+        showError("loginMessage", (res.data && res.data.error) || "The username and password could not be verified.");
+      }
+    });
+  </script>
+</body>
+</html>

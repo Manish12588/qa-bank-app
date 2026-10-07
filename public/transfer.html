@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>QABank | Transfer Funds</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a href="dashboard.html" class="brand">QA<span>Bank</span></a>
+      <nav>
+        <a href="dashboard.html">Accounts Overview</a>
+        <a href="openaccount.html">Open New Account</a>
+        <a href="transfer.html" class="active">Transfer Funds</a>
+        <a href="billpay.html">Bill Pay</a>
+        <a href="loan.html">Request Loan</a>
+        <a href="findtrans.html">Find Transactions</a>
+      </nav>
+      <a href="#" id="logoutLink" class="logout-link">Log Out</a>
+    </aside>
+
+    <main class="main-content">
+      <h2>Transfer Funds</h2>
+      <p class="page-sub">Move money between your own accounts.</p>
+
+      <div class="content-grid">
+        <div class="card" style="max-width:none;">
+          <form id="transferForm">
+            <label for="amount">Amount</label>
+            <input id="amount" name="amount" required>
+
+            <label for="fromAccountId">From Account</label>
+            <select id="fromAccountId" name="fromAccountId"></select>
+
+            <label for="toAccountId">To Account</label>
+            <select id="toAccountId" name="toAccountId"></select>
+
+            <button type="submit" id="transferButton">Transfer</button>
+          </form>
+
+          <div id="transferSuccessMessage" class="success"></div>
+          <div id="transferError" class="error"></div>
+        </div>
+
+        <div class="side-card">
+          <h3>Your Accounts</h3>
+          <div id="sideAccounts"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    function renderSideAccounts(accounts) {
+      const el = document.getElementById("sideAccounts");
+      el.innerHTML = accounts.map((acc) => `
+        <div class="mini-account-row">
+          <div><div>#${acc.id}</div><div class="acc-type">${acc.type}</div></div>
+          <div class="acc-balance">$${acc.balance.toFixed(2)}</div>
+        </div>
+      `).join("");
+    }
+
+    async function loadAccountOptions() {
+      const res = await api("GET", "/api/accounts");
+      if (!res.ok) { window.location.href = "login.html"; return; }
+      ["fromAccountId", "toAccountId"].forEach((id) => {
+        const sel = document.getElementById(id);
+        sel.innerHTML = "";
+        res.data.forEach((acc) => {
+          const opt = document.createElement("option");
+          opt.value = acc.id;
+          opt.textContent = `${acc.id} (${acc.type}) - $${acc.balance.toFixed(2)}`;
+          sel.appendChild(opt);
+        });
+      });
+      renderSideAccounts(res.data);
+    }
+    document.getElementById("transferForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      document.getElementById("transferSuccessMessage").textContent = "";
+      document.getElementById("transferError").textContent = "";
+      const res = await api("POST", "/api/transfer", {
+        amount: form.amount.value,
+        fromAccountId: Number(form.fromAccountId.value),
+        toAccountId: Number(form.toAccountId.value),
+      });
+      if (res.ok) {
+        document.getElementById("transferSuccessMessage").textContent = res.data.message;
+        loadAccountOptions();
+      } else {
+        document.getElementById("transferError").textContent = (res.data && res.data.error) || "Transfer failed.";
+      }
+    });
+    document.getElementById("logoutLink").addEventListener("click", async (e) => {
+      e.preventDefault();
+      await api("POST", "/api/logout");
+      window.location.href = "login.html";
+    });
+    loadAccountOptions();
+  </script>
+</body>
+</html>
