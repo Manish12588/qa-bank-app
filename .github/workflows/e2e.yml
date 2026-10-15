@@ -1,0 +1,86 @@
+name: QABank App E2E
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # 1. The app, at the exact commit being tested (PR code or main)
+      - name: Checkout app
+        uses: actions/checkout@v4
+
+      # 2. The test suite (public repo, no token needed)
+      - name: Checkout tests
+        uses: actions/checkout@v4
+        with:
+          repository: Manish12588/qa-bank-app-test
+          path: e2e-tests
+
+      - name: Start QABank and wait until healthy
+        run: docker compose up -d --build --wait
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: "npm"
+          cache-dependency-path: e2e-tests/package-lock.json
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('e2e-tests/package-lock.json') }}
+
+      - name: Install dependencies
+        working-directory: e2e-tests
+        run: npm ci
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        working-directory: e2e-tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright OS deps only (if cached)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        working-directory: e2e-tests
+        run: npx playwright install-deps chromium
+
+      - name: Run tests
+        working-directory: e2e-tests
+        run: npx playwright test
+        env:
+          ENV: qa
+          API_BASE_URL: http://localhost:8080/api
+          WEB_BASE_URL: http://localhost:8080
+
+      - name: App logs
+        if: failure()
+        run: docker compose logs
+
+      - name: Upload HTML Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-html-report-${{ github.run_id }}
+          path: e2e-tests/reports/html-report/
+          retention-days: 30
+
+      - name: Upload reportingLabs Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reporting-labs-report-${{ github.run_id }}
+          path: e2e-tests/reporting-labs/
+          retention-days: 30
