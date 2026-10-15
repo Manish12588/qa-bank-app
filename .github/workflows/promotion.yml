@@ -56,6 +56,9 @@ jobs:
     # Runs even when a stage failed or was skipped, so a red run still gets its reports.
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
+    concurrency:
+      group: gh-pages-publish
+      cancel-in-progress: false
     permissions:
       contents: write # pushes the gh-pages branch
     env:
