@@ -158,13 +158,27 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: site
           destination_dir: runs/${{ github.run_id }}
-          keep_files: true
+          keep_files:
+            true
 
-      # A fixed URL that always shows the newest run, handy for the README
+            # A fixed URL that always shows the newest run, handy for the README
       - name: Publish as latest
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: site
           destination_dir: latest
+          keep_files: true
+
+      # Makes the root URL work: it redirects to latest/
+      - name: Create root redirect page
+        run: |
+          mkdir redirect
+          echo '<!DOCTYPE html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=latest/"><a href="latest/">Latest report</a>' > redirect/index.html
+
+      - name: Publish root redirect
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: redirect
           keep_files: true
