@@ -1,0 +1,170 @@
+name: Promotion DEV - QA - STAGE
+
+# Run it from the Actions tab and pick how far it should go:
+#   DEV   -> DEV only          (smoke tests)
+#   QA    -> DEV, then QA      (smoke, then all tests)
+#   STAGE -> DEV, QA, STAGE    (STAGE waits for a manual approval)
+# Each stage only starts if the one before it passed.
+# At the end the reports are published to GitHub Pages and a summary is added to the run.
+run-name: Promotion up to ${{ inputs.environment }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Run up to environment"
+        required: true
+        default: "QA"
+        type: choice
+        options:
+          - DEV
+          - QA
+          - STAGE
+
+permissions:
+  contents: read
+
+jobs:
+  dev:
+    name: DEV - smoke
+    uses: ./.github/workflows/stage.yml
+    with:
+      environment: DEV
+      test_args: "--grep @smoke"
+
+  qa:
+    name: QA - regression
+    needs: dev
+    if: contains(fromJSON('["QA","STAGE"]'), inputs.environment)
+    uses: ./.github/workflows/stage.yml
+    with:
+      environment: QA
+      test_args: ""
+
+  stage:
+    name: STAGE - smoke
+    needs: qa
+    if: inputs.environment == 'STAGE'
+    uses: ./.github/workflows/stage.yml
+    with:
+      environment: STAGE
+      test_args: "--grep @smoke"
+
+  publish:
+    name: Publish reports
+    needs: [dev, qa, stage]
+    # Runs even when a stage failed or was skipped, so a red run still gets its reports.
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # pushes the gh-pages branch
+    env:
+      SELECTED_ENV: ${{ inputs.environment }}
+      DEV_RESULT: ${{ needs.dev.result }}
+      QA_RESULT: ${{ needs.qa.result }}
+      STAGE_RESULT: ${{ needs.stage.result }}
+      RUN_ID: ${{ github.run_id }}
+      ACTOR: ${{ github.actor }}
+      PAGES_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+
+    steps:
+      - name: Download all stage reports
+        uses: actions/download-artifact@v4
+        with:
+          path: all-reports
+
+      - name: Build the report site
+        run: |
+          set -euo pipefail
+          mkdir -p site
+
+          badge() {
+            case "$1" in
+              success)   echo "passed" ;;
+              failure)   echo "FAILED" ;;
+              skipped)   echo "not run" ;;
+              cancelled) echo "cancelled" ;;
+              *)         echo "$1" ;;
+            esac
+          }
+
+          cards=""
+          for stage in DEV QA STAGE; do
+            lower=$(echo "$stage" | tr '[:upper:]' '[:lower:]')
+            result_var="${stage}_RESULT"
+            result="${!result_var}"
+            case "$stage" in
+              DEV)   what="Smoke tests" ;;
+              QA)    what="Regression, all tests" ;;
+              STAGE) what="Smoke tests after approval" ;;
+            esac
+
+            links=""
+            if [ -d "all-reports/${stage}-html-report" ]; then
+              cp -r "all-reports/${stage}-html-report" "site/${lower}-html"
+              links="${links}<a class=\"btn\" href=\"${lower}-html/index.html\">HTML report</a>"
+            fi
+            if [ -d "all-reports/${stage}-reporting-labs" ]; then
+              cp -r "all-reports/${stage}-reporting-labs" "site/${lower}-rlabs"
+              links="${links}<a class=\"btn alt\" href=\"${lower}-rlabs/index.html\">reportingLabs</a>"
+            fi
+
+            cards="${cards}<div class=\"card\"><h2>${stage}</h2><p>${what} &middot; <strong>$(badge "$result")</strong></p>${links}</div>"
+          done
+
+          cat > site/index.html <<HTML
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>QABank pipeline run ${RUN_ID}</title>
+            <style>
+              body { font-family: system-ui, sans-serif; background: #f5f5f5; margin: 0; padding: 32px 16px; color: #1a1a2e; }
+              main { max-width: 760px; margin: 0 auto; }
+              .meta { color: #666; font-size: 14px; }
+              .card { background: #fff; border-radius: 10px; padding: 16px 20px; margin: 14px 0; box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+              .card h2 { margin: 0 0 4px; font-size: 18px; }
+              .card p { margin: 0 0 12px; color: #555; }
+              .btn { display: inline-block; padding: 8px 16px; margin-right: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; text-decoration: none; font-size: 14px; }
+              .btn.alt { background: #6f42c1; }
+            </style>
+          </head>
+          <body>
+            <main>
+              <h1>QABank pipeline report</h1>
+              <p class="meta">Run ${RUN_ID} &middot; up to ${SELECTED_ENV} &middot; started by ${ACTOR} &middot; $(date -u +'%d %b %Y, %H:%M UTC')</p>
+              ${cards}
+            </main>
+          </body>
+          </html>
+          HTML
+
+          {
+            echo "## QABank pipeline: up to ${SELECTED_ENV}"
+            echo ""
+            echo "| Stage | Tests | Result |"
+            echo "|---|---|---|"
+            echo "| DEV | Smoke | $(badge "$DEV_RESULT") |"
+            echo "| QA | All tests | $(badge "$QA_RESULT") |"
+            echo "| STAGE | Smoke, after approval | $(badge "$STAGE_RESULT") |"
+            echo ""
+            echo "Reports (live about a minute after this run): ${PAGES_URL}/runs/${RUN_ID}/"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish this run
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: site
+          destination_dir: runs/${{ github.run_id }}
+          keep_files: true
+
+      # A fixed URL that always shows the newest run, handy for the README
+      - name: Publish as latest
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: site
+          destination_dir: latest
+          keep_files: true
