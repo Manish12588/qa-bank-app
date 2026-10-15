@@ -1,0 +1,188 @@
+name: QABank App E2E
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # 1. The app, at the exact commit being tested (PR code or main)
+      - name: Checkout app
+        uses: actions/checkout@v4
+
+      # 2. The test suite (public repo, no token needed)
+      - name: Checkout tests
+        uses: actions/checkout@v4
+        with:
+          repository: Manish12588/qa-bank-app-test
+          path: e2e-tests
+
+      - name: Start QABank and wait until healthy
+        run: docker compose up -d --build --wait
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: "npm"
+          cache-dependency-path: e2e-tests/package-lock.json
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('e2e-tests/package-lock.json') }}
+
+      - name: Install dependencies
+        working-directory: e2e-tests
+        run: npm ci
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        working-directory: e2e-tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright OS deps only (if cached)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        working-directory: e2e-tests
+        run: npx playwright install-deps chromium
+
+      - name: Run tests
+        working-directory: e2e-tests
+        run: npx playwright test
+        env:
+          ENV: qa
+          API_BASE_URL: http://localhost:8080/api
+          WEB_BASE_URL: http://localhost:8080
+
+      - name: App logs
+        if: failure()
+        run: docker compose logs
+
+      - name: Upload HTML Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: html-report
+          path: e2e-tests/reports/html-report/
+          retention-days: 30
+
+      - name: Upload reportingLabs Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reporting-labs
+          path: e2e-tests/reporting-labs/
+          retention-days: 30
+
+  publish:
+    name: Publish reports
+    needs: e2e
+    # Not for pull requests: they must not overwrite the published report.
+    # Runs even when the tests failed, so a red run still gets its report.
+    if: ${{ !cancelled() && github.event_name != 'pull_request' }}
+    runs-on: ubuntu-latest
+    # One publisher at a time, so this and the promotion pipeline never push to gh-pages together
+    concurrency:
+      group: gh-pages-publish
+      cancel-in-progress: false
+    permissions:
+      contents: write # pushes the gh-pages branch
+    env:
+      TEST_RESULT: ${{ needs.e2e.result }}
+      RUN_ID: ${{ github.run_id }}
+      ACTOR: ${{ github.actor }}
+      BRANCH: ${{ github.ref_name }}
+      PAGES_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+
+    steps:
+      - name: Download reports
+        uses: actions/download-artifact@v4
+        with:
+          path: all-reports
+
+      - name: Build the report site
+        run: |
+          set -euo pipefail
+          mkdir -p site
+
+          case "$TEST_RESULT" in
+            success)   result="passed" ;;
+            failure)   result="FAILED" ;;
+            cancelled) result="cancelled" ;;
+            *)         result="$TEST_RESULT" ;;
+          esac
+
+          links=""
+          if [ -d "all-reports/html-report" ]; then
+            cp -r all-reports/html-report site/html
+            links="${links}<a class=\"btn\" href=\"html/index.html\">HTML report</a>"
+          fi
+          if [ -d "all-reports/reporting-labs" ]; then
+            cp -r all-reports/reporting-labs site/rlabs
+            links="${links}<a class=\"btn alt\" href=\"rlabs/index.html\">reportingLabs</a>"
+          fi
+
+          cat > site/index.html <<HTML
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>QABank E2E run ${RUN_ID}</title>
+            <style>
+              body { font-family: system-ui, sans-serif; background: #f5f5f5; margin: 0; padding: 32px 16px; color: #1a1a2e; }
+              main { max-width: 760px; margin: 0 auto; }
+              .meta { color: #666; font-size: 14px; }
+              .card { background: #fff; border-radius: 10px; padding: 16px 20px; margin: 14px 0; box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+              .card h2 { margin: 0 0 4px; font-size: 18px; }
+              .card p { margin: 0 0 12px; color: #555; }
+              .btn { display: inline-block; padding: 8px 16px; margin-right: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; text-decoration: none; font-size: 14px; }
+              .btn.alt { background: #6f42c1; }
+            </style>
+          </head>
+          <body>
+            <main>
+              <h1>QABank E2E report</h1>
+              <p class="meta">Run ${RUN_ID} &middot; branch ${BRANCH} &middot; started by ${ACTOR} &middot; $(date -u +'%d %b %Y, %H:%M UTC')</p>
+              <div class="card"><h2>App change check</h2><p>All tests &middot; <strong>${result}</strong></p>${links}</div>
+            </main>
+          </body>
+          </html>
+          HTML
+
+          {
+            echo "## QABank E2E: ${BRANCH}"
+            echo ""
+            echo "| Check | Tests | Result |"
+            echo "|---|---|---|"
+            echo "| App change | All tests | ${result} |"
+            echo ""
+            echo "Reports (live about a minute after this run): ${PAGES_URL}/e2e/runs/${RUN_ID}/"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish this run
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: site
+          destination_dir: e2e/runs/${{ github.run_id }}
+          keep_files: true
+
+      - name: Publish as latest
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: site
+          destination_dir: e2e/latest
+          keep_files: true
