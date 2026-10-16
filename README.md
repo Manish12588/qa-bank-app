@@ -87,6 +87,21 @@ Each stage builds the app from this repo's `Dockerfile`, starts it with `docker 
 
 The three environments are simulated. They run the same code from the same commit on the same kind of runner, and differ in configuration and in how much of the suite they run. There is no separate deployment behind them.
 
+## See the pipeline catch a bug
+
+`scripts/break-loan.sh` plants one deliberate bug: the loan limit changes from 10x to 11x the down payment. Run it on a branch and open a pull request. The `e2e` check goes red on one test, `LOAN-03 denies loan above the limit`.
+
+```bash
+git checkout -b demo-break-loan-limit
+./scripts/break-loan.sh
+git commit -am "Demo: break loan limit"
+git push -u origin HEAD
+```
+
+Open a pull request into `main` and watch the `e2e` check fail. Close the pull request without merging, then delete the branch. `./scripts/fix-loan.sh` restores the original rule.
+
+Pull requests never publish reports, so the Pages site keeps showing the last good run on `main`.
+
 ### Reports
 
 Every run publishes its reports to GitHub Pages, whether it passed or failed:
