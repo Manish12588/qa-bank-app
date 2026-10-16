@@ -276,7 +276,7 @@ app.post("/api/loan", requireAuth, (req, res) => {
   }
 
   // simple approval rule: approved if requested amount is no more than 10x the down payment
-  const approved = amount <= downPayment * 10;
+  const approved = amount <= downPayment * 11;
 
   if (!approved) {
     return res.json({ approved: false, message: "error.insufficient.funds", accountId: null });
