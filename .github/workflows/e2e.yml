@@ -171,18 +171,15 @@ jobs:
             echo "Reports (live about a minute after this run): ${PAGES_URL}/e2e/runs/${RUN_ID}/"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Publish this run
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: site
-          destination_dir: e2e/runs/${{ github.run_id }}
-          keep_files: true
+      - name: Publish this run and latest
+        run: |
+          mkdir -p out/e2e/runs/${{ github.run_id }} out/e2e/latest
+          cp -r site/. out/e2e/runs/${{ github.run_id }}/
+          cp -r site/. out/e2e/latest/
 
-      - name: Publish as latest
+      - name: Publish
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: site
-          destination_dir: e2e/latest
+          publish_dir: out
           keep_files: true
